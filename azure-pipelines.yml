@@ -1,19 +1,45 @@
-trigger:
-- main
-
 pool:
-  vmImage: 'ubuntu-latest'
-
+  vmImage: ubuntu-latest
+trigger:
+  - master
 steps:
-- task: NodeTool@0
-  inputs:
-    versionSpec: '16.04'
-  displayName: 'Install Node.js'
+  - task: Npm@1
+    inputs:
+      command: custom
+      customCommand: "install --production"
+  
+  - script: |
+      npm install
+      npm test
+    displayName: Run unit tests
+    continueOnError: true
 
-- script: |
-    npm install
-  displayName: 'npm install'
+  - task: PublishTestResults@2
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFiles: $(System.DefaultWorkingDirectory)/test-report.xml
+    displayName: 'Publish Test Results'
 
-- script: |
-    npm run build
-  displayName: 'npm build'
+  - task: PublishCodeCoverageResults@1
+    condition: 'in(variables[''Agent.JobStatus''], ''Succeeded'')'
+    inputs:
+      codeCoverageTool: Cobertura
+      summaryFileLocation: '$(System.DefaultWorkingDirectory)/coverage/*coverage.xml'
+      reportDirectory: $(System.DefaultWorkingDirectory)/coverage
+    displayName: 'Publish Code Coverage'
+
+  - task: CopyFiles@2
+    inputs:
+      SourceFolder: deployment
+      Contents: "*.json"
+      TargetFolder: "$(build.artifactstagingdirectory)/Templates"
+    displayName: "Copy Files to: $(build.artifactstagingdirectory)/Templates"
+  
+  - task: ArchiveFiles@2
+    inputs:
+      rootFolderOrFile: "$(Build.SourcesDirectory)"
+      includeRootFolder: false
+    displayName: "Archive $(Build.SourcesDirectory)"
+
+  - task: PublishBuildArtifacts@1
+    displayName: "Publish Artifact: drop"
